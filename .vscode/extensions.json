@@ -1,0 +1,34 @@
+{
+  "recommendations": [
+    // CloudFormation
+    "aws-scripting-guy.cform",
+    "kddejong.vscode-cfn-lint",
+    "redhat.vscode-yaml",
+    // General
+    "esbenp.prettier-vscode",
+    "aaron-bond.better-comments",
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+    "mkxml.vscode-filesize",
+    "mhutchie.git-graph",
+    "github.vscode-github-actions",
+    "github.copilot",
+    "github.copilot-chat",
+    "bierner.github-markdown-preview",
+    "github.vscode-pull-request-github",
+    "eamodio.gitlens",
+    "oderwat.indent-rainbow",
+    "yzhang.markdown-all-in-one",
+    "davidanson.vscode-markdownlint",
+    "bpruitt-goddard.mermaid-markdown-syntax-highlighting",
+    "gruntfuggly.todo-tree",
+    "pflannery.vscode-versionlens",
+    "mosapride.zenkaku",
+    "vscode-icons-team.vscode-icons",
+    "editorconfig.editorconfig",
+    "ms-azuretools.vscode-docker",
+    "davidanson.vscode-markdownlint",
+    "johnpapa.vscode-peacock",
+    "tamasfe.even-better-toml"
+  ]
+}

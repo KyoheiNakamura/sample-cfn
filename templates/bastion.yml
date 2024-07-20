@@ -1,0 +1,233 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create a Bastion server in a dedicated VPC. Use this template when you manually execute Terraform, push an image to ECR. The SSH private key is saved to AWS Systems Manager Parameter Store using a parameter with the following name: /ec2/keypair/{key_pair_id}."
+
+Parameters:
+  # Common
+  Env:
+    Type: String
+    AllowedValues:
+      - prod
+      - stg
+      - test
+    Default: test
+  System:
+    Type: String
+    Default: sample
+  ManagedBy:
+    Type: String
+    Default: CloudFormation
+  # EC2
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.medium
+  ImageId:
+    Description: EC2 image id (AMI)
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+
+Resources:
+  # VPC
+  VPCBastion:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  # Subnets
+  SubnetPublicBastionA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select
+        - 0
+        - Fn::GetAZs: !Ref AWS::Region
+      VpcId: !Ref VPCBastion
+      CidrBlock: 10.0.240.0/24
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-public-bastion-a
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  # Internet Gateway
+  InternetGatewayBastion:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  InternetGatewayAttachmentBastion:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPCBastion
+      InternetGatewayId: !Ref InternetGatewayBastion
+  # Route Table
+  RouteTablePublicBastion:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPCBastion
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-public-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  RoutePublicBastion:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref RouteTablePublicBastion
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGatewayBastion
+    DependsOn:
+      - InternetGatewayAttachmentBastion
+  RouteTableAssociationPublicBastionA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref SubnetPublicBastionA
+      RouteTableId: !Ref RouteTablePublicBastion
+  # Security Group
+  SecurityGroupBastion:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${Env}-${System}-ec2-bastion
+      GroupDescription: Bastion Security Group
+      VpcId: !Ref VPCBastion
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-ec2-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  # IAM Role
+  RoleBastion:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${Env}-${System}-bastion
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  # IAM Instance Profile
+  InstanceProfileBastion:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${Env}-${System}-bastion
+      Roles:
+        - !Ref RoleBastion
+  # Key Pair
+  # * When you create a new key pair, the private key is saved to AWS Systems Manager Parameter Store,
+  # * using a parameter with the following name: /ec2/keypair/{key_pair_id}.
+  KeyPairBastion:
+    Type: AWS::EC2::KeyPair
+    Properties:
+      KeyName: !Sub ${Env}-${System}-bastion
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+  # EC2
+  EC2Bastion:
+    Type: AWS::EC2::Instance
+    Properties:
+      IamInstanceProfile: !Ref InstanceProfileBastion
+      KeyName: !Ref KeyPairBastion
+      ImageId: !Ref ImageId
+      InstanceType: !Ref InstanceType
+      # Monitoring: true|false
+      SecurityGroupIds:
+        - !GetAtt SecurityGroupBastion.GroupId
+      SubnetId: !Ref SubnetPublicBastionA
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            Encrypted: true
+            VolumeSize: 20
+            VolumeType: gp3
+      UserData: !Base64 |
+        #!/bin/bash -ex
+        dnf update -y
+        dnf install -y dnf-plugins-core
+        # Install gpg-agent for Terraform
+        dnf swap gnupg2-minimal gnupg2 -y
+        # Install Docker
+        dnf install -y docker
+        systemctl start docker
+        systemctl enable docker
+        usermod -aG docker ec2-user
+        newgrp docker
+        # Install Docker Compose
+        mkdir -p /usr/local/lib/docker/cli-plugins
+        DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)
+        curl -SL "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
+        chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+        # Install Gat
+        dnf install -y git
+      Tags:
+        - Key: Name
+          Value: !Sub ${Env}-${System}-bastion
+        - Key: Env
+          Value: !Ref Env
+        - Key: System
+          Value: !Ref System
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+
+Outputs:
+  EC2BastionPublicDnsName:
+    Description: Public DNS name of the Bastion server (EC2 instance)
+    Value: !GetAtt EC2Bastion.PublicDnsName
+  KeyPairBastionLocation:
+    Description: Location of the private key for the Bastion server in AWS Systems Manager Parameter Store
+    Value: !Sub /ec2/keypair/${KeyPairBastion.KeyPairId}
