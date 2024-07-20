@@ -43,13 +43,13 @@
 
 #### 1-2. 踏み台サーバーのパブリック DNS のメモ
 
-1. [1. 踏み台サーバーの作成](#1-踏み台サーバーの作成) で作成した bastion スタックの出力から、踏み台サーバーのパブリック DNS (`EC2BastionPublicDnsName`) の値をメモします。
+1. [1-1. CloudFormation スタックの作成](#1-1-cloudformation-スタックの作成) で作成した bastion スタックの出力から、踏み台サーバーのパブリック DNS (`EC2BastionPublicDnsName`) の値をメモします。
 
     ![alt text](./docs/images/aws-cfn-bastion-output-ec2.png)
 
 #### 1-3. SSH プライベートキーのメモ
 
-1. [1. 踏み台サーバーの作成](#1-踏み台サーバーの作成) で作成した bastion スタックの出力から、SSH プライベートキー (`KeyPairBastionLocation`) の値をメモします。
+1. [1-1. CloudFormation スタックの作成](#1-1-cloudformation-スタックの作成) で作成した bastion スタックの出力から、SSH プライベートキー (`KeyPairBastionLocation`) の値をメモします。
 
     ![alt text](./docs/images/aws-cfn-bastion-output-keypair.png)
 
