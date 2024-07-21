@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create a Bastion server in a dedicated VPC. Use this template when you manually execute Terraform, push an image to ECR. The SSH private key is saved to AWS Systems Manager Parameter Store using a parameter with the following name: /ec2/keypair/{key_pair_id}."
+Description: "Create a tf-helper EC2 instance in a dedicated VPC. Use this template when you manually execute Terraform, push an image to ECR and push source code to CodeCommit. The SSH private key is saved to AWS Systems Manager Parameter Store using a parameter with the following name: /ec2/keypair/{key_pair_id}."
 
 Parameters:
   # Common
@@ -28,7 +28,7 @@ Parameters:
 
 Resources:
   # VPC
-  VPCBastion:
+  VPCTfHelper:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
@@ -36,7 +36,7 @@ Resources:
       EnableDnsSupport: true
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-bastion
+          Value: !Sub ${Env}-${System}-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
@@ -44,18 +44,18 @@ Resources:
         - Key: ManagedBy
           Value: !Ref ManagedBy
   # Subnets
-  SubnetPublicBastionA:
+  SubnetPublicTfHelperA:
     Type: AWS::EC2::Subnet
     Properties:
       AvailabilityZone: !Select
         - 0
         - Fn::GetAZs: !Ref AWS::Region
-      VpcId: !Ref VPCBastion
+      VpcId: !Ref VPCTfHelper
       CidrBlock: 10.0.240.0/24
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-public-bastion-a
+          Value: !Sub ${Env}-${System}-public-tf-helper-a
         - Key: Env
           Value: !Ref Env
         - Key: System
@@ -63,57 +63,57 @@ Resources:
         - Key: ManagedBy
           Value: !Ref ManagedBy
   # Internet Gateway
-  InternetGatewayBastion:
+  InternetGatewayTfHelper:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-bastion
+          Value: !Sub ${Env}-${System}-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
           Value: !Ref System
         - Key: ManagedBy
           Value: !Ref ManagedBy
-  InternetGatewayAttachmentBastion:
+  InternetGatewayAttachmentTfHelper:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref VPCBastion
-      InternetGatewayId: !Ref InternetGatewayBastion
+      VpcId: !Ref VPCTfHelper
+      InternetGatewayId: !Ref InternetGatewayTfHelper
   # Route Table
-  RouteTablePublicBastion:
+  RouteTablePublicTfHelper:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref VPCBastion
+      VpcId: !Ref VPCTfHelper
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-public-bastion
+          Value: !Sub ${Env}-${System}-public-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
           Value: !Ref System
         - Key: ManagedBy
           Value: !Ref ManagedBy
-  RoutePublicBastion:
+  RoutePublicTfHelper:
     Type: AWS::EC2::Route
     Properties:
-      RouteTableId: !Ref RouteTablePublicBastion
+      RouteTableId: !Ref RouteTablePublicTfHelper
       DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref InternetGatewayBastion
+      GatewayId: !Ref InternetGatewayTfHelper
     DependsOn:
-      - InternetGatewayAttachmentBastion
-  RouteTableAssociationPublicBastionA:
+      - InternetGatewayAttachmentTfHelper
+  RouteTableAssociationPublicTfHelperA:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref SubnetPublicBastionA
-      RouteTableId: !Ref RouteTablePublicBastion
+      SubnetId: !Ref SubnetPublicTfHelperA
+      RouteTableId: !Ref RouteTablePublicTfHelper
   # Security Group
-  SecurityGroupBastion:
+  SecurityGroupTfHelper:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: !Sub ${Env}-${System}-ec2-bastion
-      GroupDescription: Bastion Security Group
-      VpcId: !Ref VPCBastion
+      GroupName: !Sub ${Env}-${System}-ec2-tf-helper
+      GroupDescription: Security Group
+      VpcId: !Ref VPCTfHelper
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 22
@@ -124,7 +124,7 @@ Resources:
           CidrIp: 0.0.0.0/0
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-ec2-bastion
+          Value: !Sub ${Env}-${System}-ec2-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
@@ -132,10 +132,10 @@ Resources:
         - Key: ManagedBy
           Value: !Ref ManagedBy
   # IAM Role
-  RoleBastion:
+  RoleTfHelper:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub ${Env}-${System}-bastion
+      RoleName: !Sub ${Env}-${System}-tf-helper
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -147,7 +147,7 @@ Resources:
         - arn:aws:iam::aws:policy/AdministratorAccess
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-bastion
+          Value: !Sub ${Env}-${System}-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
@@ -155,22 +155,22 @@ Resources:
         - Key: ManagedBy
           Value: !Ref ManagedBy
   # IAM Instance Profile
-  InstanceProfileBastion:
+  InstanceProfileTfHelper:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      InstanceProfileName: !Sub ${Env}-${System}-bastion
+      InstanceProfileName: !Sub ${Env}-${System}-tf-helper
       Roles:
-        - !Ref RoleBastion
+        - !Ref RoleTfHelper
   # Key Pair
   # * When you create a new key pair, the private key is saved to AWS Systems Manager Parameter Store,
   # * using a parameter with the following name: /ec2/keypair/{key_pair_id}.
-  KeyPairBastion:
+  KeyPairTfHelper:
     Type: AWS::EC2::KeyPair
     Properties:
-      KeyName: !Sub ${Env}-${System}-bastion
+      KeyName: !Sub ${Env}-${System}-tf-helper
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-bastion
+          Value: !Sub ${Env}-${System}-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
@@ -178,17 +178,17 @@ Resources:
         - Key: ManagedBy
           Value: !Ref ManagedBy
   # EC2
-  EC2Bastion:
+  EC2TfHelper:
     Type: AWS::EC2::Instance
     Properties:
-      IamInstanceProfile: !Ref InstanceProfileBastion
-      KeyName: !Ref KeyPairBastion
+      IamInstanceProfile: !Ref InstanceProfileTfHelper
+      KeyName: !Ref KeyPairTfHelper
       ImageId: !Ref ImageId
       InstanceType: !Ref InstanceType
       # Monitoring: true|false
       SecurityGroupIds:
-        - !GetAtt SecurityGroupBastion.GroupId
-      SubnetId: !Ref SubnetPublicBastionA
+        - !GetAtt SecurityGroupTfHelper.GroupId
+      SubnetId: !Ref SubnetPublicTfHelperA
       BlockDeviceMappings:
         - DeviceName: /dev/xvda
           Ebs:
@@ -212,11 +212,11 @@ Resources:
         DOCKER_COMPOSE_VERSION=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name)
         curl -SL "https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose
         chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
-        # Install Gat
+        # Install Git
         dnf install -y git
       Tags:
         - Key: Name
-          Value: !Sub ${Env}-${System}-bastion
+          Value: !Sub ${Env}-${System}-tf-helper
         - Key: Env
           Value: !Ref Env
         - Key: System
@@ -225,9 +225,9 @@ Resources:
           Value: !Ref ManagedBy
 
 Outputs:
-  EC2BastionPublicDnsName:
-    Description: Public DNS name of the Bastion server (EC2 instance)
-    Value: !GetAtt EC2Bastion.PublicDnsName
-  KeyPairBastionLocation:
-    Description: Location of the private key for the Bastion server in AWS Systems Manager Parameter Store
-    Value: !Sub /ec2/keypair/${KeyPairBastion.KeyPairId}
+  EC2TfHelperPublicDnsName:
+    Description: Public DNS name of the tf-helper server (EC2 instance)
+    Value: !GetAtt EC2TfHelper.PublicDnsName
+  KeyPairTfHelperLocation:
+    Description: Location of the private key for the tf-helper server in AWS Systems Manager Parameter Store
+    Value: !Sub /ec2/keypair/${KeyPairTfHelper.KeyPairId}
